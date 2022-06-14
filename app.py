@@ -78,7 +78,6 @@ def get_eui(job) -> List[float]:
     return eui
 
 
-@ st.cache()
 def get_figure(df, eui):
 
     dimension = [
