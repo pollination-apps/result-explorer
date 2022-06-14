@@ -44,6 +44,12 @@ def request_status(job: Job) -> SimStatus:
         return SimStatus.COMPLETE
 
 
+def extract_eui(file_path: Path) -> float:
+    with open(file_path.as_posix(), 'r') as file:
+        data = json.load(file)
+        return data['eui']
+
+
 @st.cache()
 def get_eui(job) -> List[float]:
     eui_folder = st.session_state.temp_folder.joinpath('eui')
@@ -67,9 +73,7 @@ def get_eui(job) -> List[float]:
             zip_folder.extractall(run_folder.as_posix())
 
         eui_file = run_folder.joinpath('eui.json')
-        with open(eui_file.as_posix(), 'r') as file:
-            data = json.load(file)
-            eui.append(data['eui'])
+        eui.append(extract_eui(eui_file))
 
     return eui
 
