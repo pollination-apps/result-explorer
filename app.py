@@ -50,7 +50,10 @@ def extract_eui(file_path: Path) -> float:
         return data['eui']
 
 
-@st.cache()
+def json_scanner_hash(obj):
+    return obj.json()
+
+
 def get_eui(job) -> List[float]:
     eui_folder = st.session_state.temp_folder.joinpath('eui')
     st.session_state.eui_folder = eui_folder
@@ -102,7 +105,7 @@ def get_figure(df, eui):
         font=dict(size=15)
     )
 
-    st.session_state.fig = figure
+    return figure
 
 
 @st.cache(allow_output_mutation=True)
@@ -115,7 +118,6 @@ def create_job(job_url):
     return Job(owner, project, job_id, ApiClient())
 
 
-@st.cache()
 def download_models(job):
     model_folder = st.session_state.temp_folder.joinpath('model')
     st.session_state.model_folder = model_folder
@@ -133,7 +135,6 @@ def download_models(job):
         hbjson_file.write_bytes(hbjson_data.read())
 
 
-@st.cache()
 def viz_dict(df):
     viz_dict = {}
     for count, item in enumerate(df['option-no'].values):
@@ -141,6 +142,19 @@ def viz_dict(df):
             df['model'][count].split('/')[-1])
 
     st.session_state.viz_dict = viz_dict
+
+
+@st.cache(suppress_st_warning=True)
+def download(job):
+    eui = get_eui(job)
+
+    df = job.runs_dataframe.dataframe
+
+    download_models(job)
+    viz_dict(df)
+
+    st.session_state.eui = eui
+    st.session_state.df = df
 
 
 def main():
@@ -155,37 +169,19 @@ def main():
         'Job URL', value='https://app.pollination.cloud/devang/projects/demo/jobs/3e6bef53-179b-4fc4-aeed-03e49816e5e8')
     job = create_job(job_url)
 
-    if job:
-        if 'temp_folder' not in st.session_state:
-            st.session_state.temp_folder = Path(tempfile.mkdtemp())
+    if job and 'temp_folder' not in st.session_state:
+        st.session_state.temp_folder = Path(tempfile.mkdtemp())
 
-    clicked = st.button(label='Refresh to check status')
+    download(job)
 
-    if clicked:
-        status = request_status(job)
-        if status != SimStatus.COMPLETE:
-            st.warning(f'Simulation is {status.name}. Refresh to check again'
-                       f' or monitor [here]({job_url})')
-
-    if request_status(job) == SimStatus.COMPLETE:
-
-        eui = get_eui(job)
-
-        df = job.runs_dataframe.dataframe
-
-        get_figure(df, eui)
-
-        st.plotly_chart(st.session_state.fig)
-
-        download_models(job)
-        viz_dict(df)
-
-        option_num = st.text_input('Option number', value='')
-        if option_num:
-            try:
-                render(st.session_state.viz_dict[option_num])
-            except (ValueError, KeyError):
-                st.error('Not a valid option number.')
+    figure = get_figure(st.session_state.df, st.session_state.eui)
+    st.plotly_chart(figure)
+    option_num = st.text_input('Option number', value='')
+    if option_num:
+        try:
+            render(st.session_state.viz_dict[option_num])
+        except (ValueError, KeyError):
+            st.error('Not a valid option number.')
 
 
 if __name__ == '__main__':
