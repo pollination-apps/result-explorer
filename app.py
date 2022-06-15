@@ -169,7 +169,7 @@ def main():
         'Job URL', value='https://app.pollination.cloud/devang/projects/demo/jobs/3e6bef53-179b-4fc4-aeed-03e49816e5e8')
     job = create_job(job_url)
 
-    if job and 'temp_folder' not in st.session_state:
+    if 'temp_folder' not in st.session_state:
         st.session_state.temp_folder = Path(tempfile.mkdtemp())
 
     download(job)
