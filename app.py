@@ -50,10 +50,7 @@ def extract_eui(file_path: Path) -> float:
         return data['eui']
 
 
-def json_scanner_hash(obj):
-    return obj.json()
-
-
+@st.cache()
 def get_eui(job) -> List[float]:
     eui_folder = st.session_state.temp_folder.joinpath('eui')
     st.session_state.eui_folder = eui_folder
@@ -118,9 +115,10 @@ def create_job(job_url):
     return Job(owner, project, job_id, ApiClient())
 
 
+@st.cache()
 def download_models(job):
     model_folder = st.session_state.temp_folder.joinpath('model')
-    st.session_state.model_folder = model_folder
+
     if not model_folder.exists():
         model_folder.mkdir(parents=True, exist_ok=True)
     else:
@@ -134,7 +132,10 @@ def download_models(job):
         hbjson_data = hbjson_artifact.download()
         hbjson_file.write_bytes(hbjson_data.read())
 
+    st.session_state.model_folder = model_folder
 
+
+@st.cache()
 def viz_dict(df):
     viz_dict = {}
     for count, item in enumerate(df['option-no'].values):
@@ -142,19 +143,6 @@ def viz_dict(df):
             df['model'][count].split('/')[-1])
 
     st.session_state.viz_dict = viz_dict
-
-
-@st.cache(suppress_st_warning=True)
-def download(job):
-    eui = get_eui(job)
-
-    df = job.runs_dataframe.dataframe
-
-    download_models(job)
-    viz_dict(df)
-
-    st.session_state.eui = eui
-    st.session_state.df = df
 
 
 def main():
@@ -172,10 +160,18 @@ def main():
     if 'temp_folder' not in st.session_state:
         st.session_state.temp_folder = Path(tempfile.mkdtemp())
 
-    download(job)
+    eui = get_eui(job)
 
-    figure = get_figure(st.session_state.df, st.session_state.eui)
+    download_models(job)
+
+    df = job.runs_dataframe.dataframe
+
+    viz_dict(df)
+
+    figure = get_figure(df, eui)
+
     st.plotly_chart(figure)
+
     option_num = st.text_input('Option number', value='')
     if option_num:
         try:
