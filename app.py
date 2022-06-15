@@ -1,61 +1,35 @@
 """Visualize the results of a parametric study."""
 
 
-import streamlit as st
 import tempfile
 import json
 import zipfile
-from pollination_streamlit.selectors import job_selector
-from pollination_streamlit.api.client import ApiClient
-from plotly import graph_objects as go
-from typing import List, Tuple
-from pathlib import Path
-from pollination_streamlit.interactors import Job, Run, Recipe
-from queenbee.job.job import JobStatusEnum
-from enum import Enum
-from viewer import render
-from pollination_streamlit_io import special
 import shutil
+import streamlit as st
 
+from typing import List, Dict
+from pathlib import Path
+from plotly import graph_objects as go
+from plotly.graph_objects import Figure
+from pandas import DataFrame
 
-class SimStatus(Enum):
-    NOTSTARTED = 0
-    INCOPLETE = 1
-    COMPLETE = 2
-    FAILED = 3
-    CANCELLED = 4
+from pollination_streamlit.api.client import ApiClient
+from pollination_streamlit.interactors import Job
+from pollination_streamlit_io import special
 
-
-def request_status(job: Job) -> SimStatus:
-
-    if job.status.status in [
-            JobStatusEnum.pre_processing,
-            JobStatusEnum.running,
-            JobStatusEnum.created,
-            JobStatusEnum.unknown]:
-        return SimStatus.INCOPLETE
-
-    elif job.status.status == JobStatusEnum.failed:
-        return SimStatus.FAILED
-
-    elif job.status.status == JobStatusEnum.cancelled:
-        return SimStatus.CANCELLED
-
-    else:
-        return SimStatus.COMPLETE
+from viewer import render
 
 
 def extract_eui(file_path: Path) -> float:
+    """Extract EUI data from the eui.JSON file."""
     with open(file_path.as_posix(), 'r') as file:
         data = json.load(file)
         return data['eui']
 
 
-def hash_func(obj):
-    return obj.to_dict()
-
-
 def get_eui(job) -> List[float]:
+    """Get a list of EUI data for each run of the job."""
+
     eui_folder = st.session_state.temp_folder.joinpath('eui')
     st.session_state.eui_folder = eui_folder
     if not eui_folder.exists():
@@ -82,7 +56,8 @@ def get_eui(job) -> List[float]:
     return eui
 
 
-def get_figure(df, eui):
+def get_figure(df: DataFrame, eui: List[float]) -> Figure:
+    """Prepare Plotly Parallel Coordinates plot."""
 
     dimension = [
         dict(label='Option-no', values=df['option-no']),
@@ -110,7 +85,8 @@ def get_figure(df, eui):
 
 
 @st.cache(allow_output_mutation=True)
-def create_job(job_url):
+def create_job(job_url: str) -> Job:
+    """Create a Job object from a job URL."""
     url_split = job_url.split('/')
     job_id = url_split[-1]
     project = url_split[-3]
@@ -120,9 +96,10 @@ def create_job(job_url):
 
 
 @st.cache()
-def download_models(job):
-    model_folder = st.session_state.temp_folder.joinpath('model')
+def download_models(job: Job) -> None:
+    """Download HBJSON models from the job."""
 
+    model_folder = st.session_state.temp_folder.joinpath('model')
     if not model_folder.exists():
         model_folder.mkdir(parents=True, exist_ok=True)
     else:
@@ -139,8 +116,14 @@ def download_models(job):
     st.session_state.model_folder = model_folder
 
 
-def viz_dict(df):
-    viz_dict = {}
+def viz_lookup(df: DataFrame) -> None:
+    """Create a dictionary to lookup downloaded HBJSON files for the job.
+
+    This function creates a dictionary with the option-no as key and the
+    Path to the HBJSON file as value structure. This is dictionary is used to
+    render the HBJSON associated with an option-no in the viewer.
+    """
+    viz_dict: Dict[str, Path] = {}
     for count, item in enumerate(df['option-no'].values):
         viz_dict[item] = st.session_state.model_folder.joinpath(
             df['model'][count].split('/')[-1])
@@ -154,27 +137,38 @@ def main():
     if not host:
         host = 'web'
     st.session_state.host = host
-    st.session_state.status = None
+
+    message = 'Paste URL of job with parametric runs using the annual energy recipe.'
 
     job_url = st.text_input(
-        'Job URL', value='https://app.pollination.cloud/devang/projects/demo/jobs/3e6bef53-179b-4fc4-aeed-03e49816e5e8')
+        message,
+        value='https://app.pollination.cloud/devang/projects/demo/jobs/3e6bef53-179b-4fc4-aeed-03e49816e5e8')
+
+    if not job_url:
+        st.error(message)
+        return
+
     job = create_job(job_url)
+
+    if job.recipe.name.lower() != 'annual-energy-use':
+        st.error(
+            'This app only works with the [Annual Energy Use recipe](https://app.pollination.cloud/ladybug-tools/recipes/custom-energy-sim/0.3.11).')
+        return
 
     if 'temp_folder' not in st.session_state:
         st.session_state.temp_folder = Path(tempfile.mkdtemp())
 
+    # streamlit fails to hash a _json.Scanner object so we need to use a conditional
+    # here to not run get_eui on each referesh
     if 'eui' not in st.session_state:
         eui = get_eui(job)
         st.session_state.eui = eui
 
     download_models(job)
-
     df = job.runs_dataframe.dataframe
-
-    viz_dict(df)
+    viz_lookup(df)
 
     figure = get_figure(df, st.session_state.eui)
-
     st.plotly_chart(figure)
 
     option_num = st.text_input('Option number', value='')
