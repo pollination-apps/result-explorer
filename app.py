@@ -1,5 +1,6 @@
 """Visualize the results of a parametric study."""
 
+
 import streamlit as st
 import tempfile
 import json
@@ -50,7 +51,10 @@ def extract_eui(file_path: Path) -> float:
         return data['eui']
 
 
-@st.cache()
+def hash_func(obj):
+    return obj.to_dict()
+
+
 def get_eui(job) -> List[float]:
     eui_folder = st.session_state.temp_folder.joinpath('eui')
     st.session_state.eui_folder = eui_folder
@@ -135,7 +139,6 @@ def download_models(job):
     st.session_state.model_folder = model_folder
 
 
-@st.cache()
 def viz_dict(df):
     viz_dict = {}
     for count, item in enumerate(df['option-no'].values):
@@ -160,7 +163,9 @@ def main():
     if 'temp_folder' not in st.session_state:
         st.session_state.temp_folder = Path(tempfile.mkdtemp())
 
-    eui = get_eui(job)
+    if 'eui' not in st.session_state:
+        eui = get_eui(job)
+        st.session_state.eui = eui
 
     download_models(job)
 
@@ -168,7 +173,7 @@ def main():
 
     viz_dict(df)
 
-    figure = get_figure(df, eui)
+    figure = get_figure(df, st.session_state.eui)
 
     st.plotly_chart(figure)
 
